@@ -139,5 +139,15 @@ export async function GET(request) {
     return NextResponse.json({ accounts })
   }
 
+  // ── DEBUG ─────────────────────────────────────────────────────
+  if (action === 'debug') {
+    const cookieStore = await cookies()
+    const info = [0, 1, 2].map(i => {
+      const val = cookieStore.get(`gc_refresh_${i}`)?.value
+      return { account: i, hasCookie: !!val, preview: val ? val.slice(0,20)+'...' : null }
+    })
+    return NextResponse.json({ cookies: info, time: new Date().toISOString() })
+  }
+
   return NextResponse.json({ error: 'unknown_action' }, { status: 400 })
 }
