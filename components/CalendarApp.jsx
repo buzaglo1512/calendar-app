@@ -99,53 +99,70 @@ export default function CalendarApp() {
 
   // On mount: handle OAuth callback params + auto-refresh saved tokens
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
+    const params    = new URLSearchParams(window.location.search)
+    const isCallback = params.get('auth_success') === '1'
+    const newIdx     = isCallback ? parseInt(params.get('account') ?? '0') : -1
 
-    // Coming back from Google OAuth
-    if (params.get('auth_success') === '1') {
-      const idx   = parseInt(params.get('account') ?? '0')
+    // Coming back from Google OAuth — set the new account
+    if (isCallback) {
       const email = decodeURIComponent(params.get('email') ?? '')
       const name  = decodeURIComponent(params.get('name')  ?? '')
       const token = params.get('token') ?? ''
       if (token) {
         setAccounts(prev => {
           const updated = [...prev]
-          updated[idx] = { token, email, name }
+          updated[newIdx] = { token, email, name }
           localStorage.setItem('gc_accounts',
             JSON.stringify(updated.map(a => a ? { email: a.email, name: a.name } : null)))
           return updated
         })
-        // Remove params from URL
         window.history.replaceState({}, '', '/')
-        // Fetch events after short delay for state to settle
-        setTimeout(() => fetchEventsRef.current?.(token, idx), 300)
+        setTimeout(() => fetchEventsRef.current?.(token, newIdx), 500)
       }
-      return
     }
 
-    // Auto-refresh tokens from server cookies
+    // Auto-refresh ALL other accounts from server cookies (runs always)
     ;[0, 1, 2].forEach(async (i) => {
+      if (i === newIdx) return  // skip the one we just connected
       try {
         const res  = await fetch(`/api/auth?action=refresh&account=${i}`)
         if (!res.ok) return
         const data = await res.json()
         if (!data.access_token) return
-        // Get saved email/name from localStorage
         let email = '', name = ''
         try {
           const saved = JSON.parse(localStorage.getItem('gc_accounts') ?? '[]')
           email = saved[i]?.email ?? ''
           name  = saved[i]?.name  ?? ''
         } catch {}
-        if (!email) return // no saved account info — skip
+        if (!email) return
         setAccounts(prev => {
           const updated = [...prev]
           updated[i] = { token: data.access_token, email, name }
           return updated
         })
-        setTimeout(() => fetchEventsRef.current?.(data.access_token, i), 300 * (i + 1))
+        // Fetch events with longer delay to ensure state is settled
+        setTimeout(() => fetchEventsRef.current?.(data.access_token, i), 800 * (i + 1))
       } catch {}
     })
+
+    // After everything settles, do a full refresh of all connected accounts
+    setTimeout(() => {
+      try {
+        const saved = JSON.parse(localStorage.getItem('gc_accounts') ?? '[]')
+        saved.forEach((a, i) => {
+          if (a?.email) {
+            fetch(`/api/auth?action=refresh&account=${i}`)
+              .then(r => r.ok ? r.json() : null)
+              .then(data => {
+                if (data?.access_token) {
+                  fetchEventsRef.current?.(data.access_token, i)
+                }
+              }).catch(() => {})
+          }
+        })
+      } catch {}
+    }, 3000)
   }, []) // eslint-disable-line
 
   // Persist
