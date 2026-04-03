@@ -80,7 +80,6 @@ export default function CalendarApp() {
   const [forecast, setForecast]         = useState([])
   const [coords, setCoords]             = useState(null)
   const [selectedShabbat, setSelectedShabbat] = useState(null)
-  const [apisLoaded, setApisLoaded]     = useState(false)
   const [loadingIdx, setLoadingIdx]     = useState(null)
   const [notif, setNotif]               = useState(null)
   const [todos, setTodos]               = useState([])
@@ -90,12 +89,64 @@ export default function CalendarApp() {
   const [viewEvent, setViewEvent]       = useState(null)
   const [showConfetti, setShowConfetti]  = useState(false)
   const refreshTimerRef                 = useRef(null)
+  const fetchEventsRef                  = useRef(null)
 
   const today    = now
   const tomorrow = addDays(today, 1)
 
   // Clock tick
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 30_000); return () => clearInterval(t) }, [])
+
+  // On mount: handle OAuth callback params + auto-refresh saved tokens
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+
+    // Coming back from Google OAuth
+    if (params.get('auth_success') === '1') {
+      const idx   = parseInt(params.get('account') ?? '0')
+      const email = decodeURIComponent(params.get('email') ?? '')
+      const name  = decodeURIComponent(params.get('name')  ?? '')
+      const token = params.get('token') ?? ''
+      if (token) {
+        setAccounts(prev => {
+          const updated = [...prev]
+          updated[idx] = { token, email, name }
+          localStorage.setItem('gc_accounts',
+            JSON.stringify(updated.map(a => a ? { email: a.email, name: a.name } : null)))
+          return updated
+        })
+        // Remove params from URL
+        window.history.replaceState({}, '', '/')
+        // Fetch events after short delay for state to settle
+        setTimeout(() => fetchEventsRef.current?.(token, idx), 300)
+      }
+      return
+    }
+
+    // Auto-refresh tokens from server cookies
+    ;[0, 1, 2].forEach(async (i) => {
+      try {
+        const res  = await fetch(`/api/auth?action=refresh&account=${i}`)
+        if (!res.ok) return
+        const data = await res.json()
+        if (!data.access_token) return
+        // Get saved email/name from localStorage
+        let email = '', name = ''
+        try {
+          const saved = JSON.parse(localStorage.getItem('gc_accounts') ?? '[]')
+          email = saved[i]?.email ?? ''
+          name  = saved[i]?.name  ?? ''
+        } catch {}
+        if (!email) return // no saved account info — skip
+        setAccounts(prev => {
+          const updated = [...prev]
+          updated[i] = { token: data.access_token, email, name }
+          return updated
+        })
+        setTimeout(() => fetchEventsRef.current?.(data.access_token, i), 300 * (i + 1))
+      } catch {}
+    })
+  }, []) // eslint-disable-line
 
   // Persist
   useEffect(() => {
@@ -105,15 +156,7 @@ export default function CalendarApp() {
     } catch {}
   }, [])
 
-  // Google GSI
-  useEffect(() => {
-    if (document.querySelector('script[src*="accounts.google.com/gsi"]')) { setApisLoaded(true); return }
-    const s = document.createElement('script')
-    s.src = 'https://accounts.google.com/gsi/client'
-    s.async = true
-    s.onload = () => setApisLoaded(true)
-    document.head.appendChild(s)
-  }, [])
+
 
   // Weather + 4-day forecast + Shabbat times
   useEffect(() => {
@@ -221,30 +264,14 @@ export default function CalendarApp() {
     }
   }, [selectedDate, events])
 
-  // Google connect
+  // Google connect — redirect to server OAuth flow
   const connectAccount = useCallback((idx) => {
-    if (!apisLoaded || !window.google?.accounts?.oauth2) { toast('Google APIs עדיין נטענות…', 'error'); return }
-    const client = window.google.accounts.oauth2.initTokenClient({
-      client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
-      scope: 'https://www.googleapis.com/auth/calendar openid email profile',
-      callback: async (res) => {
-        if (!res.access_token) { toast('ההתחברות בוטלה', 'error'); return }
-        try {
-          const info = await fetch('https://www.googleapis.com/oauth2/v3/userinfo',
-            { headers: { Authorization: `Bearer ${res.access_token}` } }).then(r => r.json())
-          const updated = [...accounts]
-          updated[idx] = { token: res.access_token, email: info.email, name: info.name }
-          setAccounts(updated)
-          localStorage.setItem('gc_accounts', JSON.stringify(updated.map(a => a ? { email: a.email, name: a.name } : null)))
-          fetchEvents(res.access_token, idx)
-        } catch { toast('שגיאה בחיבור החשבון', 'error') }
-      },
-      prompt: 'select_account',
-    })
-    client.requestAccessToken()
-  }, [accounts, apisLoaded]) // eslint-disable-line
+    window.location.href = `/api/auth?action=login&account=${idx}`
+  }, [])
 
   const disconnectAccount = useCallback((idx) => {
+    // Clear server-side refresh token cookie
+    fetch(`/api/auth?action=logout&account=${idx}`).catch(() => {})
     const updated = [...accounts]; updated[idx] = null
     setAccounts(updated)
     setEvents(prev => prev.filter(e => e.accountIndex !== idx))
@@ -252,34 +279,28 @@ export default function CalendarApp() {
     toast('החשבון נותק')
   }, [accounts])
 
-  // Silent token refresh — runs every 45 min to keep tokens alive
-  const silentRefreshToken = useCallback((idx) => {
-    if (!apisLoaded || !window.google?.accounts?.oauth2) return
-    const acc = accounts[idx]
-    if (!acc) return
-    const client = window.google.accounts.oauth2.initTokenClient({
-      client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
-      scope: 'https://www.googleapis.com/auth/calendar openid email profile',
-      prompt: '', // empty = no prompt shown to user
-      login_hint: acc.email,
-      callback: (res) => {
-        if (!res.access_token) return
-        const updated = [...accounts]
-        updated[idx] = { ...acc, token: res.access_token }
-        setAccounts(updated)
-        fetchEvents(res.access_token, idx)
-      },
-    })
-    client.requestAccessToken()
-  }, [accounts, apisLoaded]) // eslint-disable-line
-
-  // Auto silent refresh every 45 minutes
+  // Silent token refresh via server every 45 min
   useEffect(() => {
-    const t = setInterval(() => {
-      accounts.forEach((a, i) => { if (a?.token) silentRefreshToken(i) })
+    const t = setInterval(async () => {
+      for (let i = 0; i < 3; i++) {
+        if (!accounts[i]) continue
+        try {
+          const res  = await fetch(`/api/auth?action=refresh&account=${i}`)
+          if (!res.ok) continue
+          const data = await res.json()
+          if (!data.access_token) continue
+          const acc = accounts[i]
+          setAccounts(prev => {
+            const updated = [...prev]
+            updated[i] = { ...acc, token: data.access_token }
+            return updated
+          })
+          fetchEventsRef.current?.(data.access_token, i)
+        } catch {}
+      }
     }, 45 * 60_000)
     return () => clearInterval(t)
-  }, [accounts, silentRefreshToken])
+  }, [accounts])
 
   const fetchEvents = useCallback(async (token, idx) => {
     setLoadingIdx(idx)
@@ -341,6 +362,9 @@ export default function CalendarApp() {
     } catch { toast('שגיאה בטעינת אירועים', 'error') }
     finally  { setLoadingIdx(null) }
   }, [disconnectAccount, now])
+
+  // Keep ref updated so mount useEffect can call it
+  useEffect(() => { fetchEventsRef.current = fetchEvents }, [fetchEvents])
 
   const refreshAll = useCallback(() => {
     accounts.forEach((a,i) => { if (a?.token) fetchEvents(a.token, i) })
