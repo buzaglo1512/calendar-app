@@ -58,7 +58,8 @@ export default function CalendarApp() {
   const [now, setNow]                   = useState(() => new Date())
   const [weather, setWeather]           = useState(null)
   const [forecast, setForecast]         = useState([])
-  const [shabbat, setShabbat]           = useState(null)
+  const [coords, setCoords]             = useState(null)
+  const [selectedShabbat, setSelectedShabbat] = useState(null)
   const [apisLoaded, setApisLoaded]     = useState(false)
   const [loadingIdx, setLoadingIdx]     = useState(null)
   const [notif, setNotif]               = useState(null)
@@ -96,6 +97,7 @@ export default function CalendarApp() {
   // Weather + 4-day forecast + Shabbat times
   useEffect(() => {
     navigator.geolocation?.getCurrentPosition(async ({ coords: { latitude: lat, longitude: lng } }) => {
+      setCoords({ lat, lng })
       // Weather
       try {
         const r = await fetch(
@@ -113,27 +115,46 @@ export default function CalendarApp() {
           code: d.daily.weather_code[i+1],
         })))
       } catch {}
-      // Shabbat times via Hebcal (free, no key)
-      try {
-        const s = await fetch(
-          `https://www.hebcal.com/shabbat?cfg=json&latitude=${lat}&longitude=${lng}&tzid=Asia/Jerusalem&m=50&b=18`
-        )
-        const sd = await s.json()
-        const candle   = sd.items?.find(i => i.category === 'candles')
-        const havdalah = sd.items?.find(i => i.category === 'havdalah')
-        const fmt = (iso) => {
-          if (!iso) return null
-          const d = new Date(iso)
-          return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
-        }
-        if (candle || havdalah) {
-          setShabbat({ candle: fmt(candle?.date), havdalah: fmt(havdalah?.date) })
-        }
-      } catch {}
+
     })
   }, [])
 
   const toast = (msg, type='ok') => { setNotif({ msg, type }); setTimeout(() => setNotif(null), 3000) }
+
+  // Fetch Shabbat times for a specific Friday or Saturday
+  const fetchShabbatForDate = useCallback(async (date) => {
+    const day = date.getDay() // 5=Fri, 6=Sat
+    if (day !== 5 && day !== 6) { setSelectedShabbat(null); return }
+    if (!coords) return
+    // Find the Friday of that week
+    const friday = new Date(date)
+    if (day === 6) friday.setDate(friday.getDate() - 1)
+    const dateStr = toKey(friday)
+    try {
+      const res = await fetch(
+        `https://www.hebcal.com/shabbat?cfg=json&latitude=${coords.lat}&longitude=${coords.lng}` +
+        `&tzid=Asia/Jerusalem&m=50&b=18&date=${dateStr}`
+      )
+      const data = await res.json()
+      const candle   = data.items?.find(i => i.category === 'candles')
+      const havdalah = data.items?.find(i => i.category === 'havdalah')
+      const fmt = (iso) => {
+        if (!iso) return null
+        const d = new Date(iso)
+        return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+      }
+      setSelectedShabbat({
+        candle:   fmt(candle?.date),
+        havdalah: fmt(havdalah?.date),
+        isFriday: day === 5,
+      })
+    } catch { setSelectedShabbat(null) }
+  }, [coords])
+
+  // Fetch when selectedDate changes to Fri/Sat
+  useEffect(() => {
+    fetchShabbatForDate(selectedDate)
+  }, [selectedDate, fetchShabbatForDate])
 
   // Google connect
   const connectAccount = useCallback((idx) => {
@@ -359,14 +380,7 @@ export default function CalendarApp() {
             <div className="header-date-heb">
               {hebrewNow.day} ב{hebrewNow.month} {hebrewNow.year}
             </div>
-            {shabbat && (
-              <div className="header-shabbat">
-                <span className="shabbat-icon">🕯️</span>
-                {shabbat.candle   && <span>כניסה {shabbat.candle}</span>}
-                {shabbat.candle && shabbat.havdalah && <span className="shabbat-sep">·</span>}
-                {shabbat.havdalah && <span>יציאה {shabbat.havdalah}</span>}
-              </div>
-            )}
+
           </div>
         </div>
 
@@ -438,6 +452,20 @@ export default function CalendarApp() {
             <button className="add-btn" onClick={() => openAdd(selectedDate)}>+</button>
           </div>
           {(() => { const h = getHoliday(selectedDate); return h ? <div className="panel-holiday">{h.emoji} {h.name}</div> : null })()}
+          {selectedShabbat && selectedShabbat.isFriday && selectedShabbat.candle && (
+            <div className="panel-shabbat-entry">
+              <span>🕯️</span>
+              <span>כניסת שבת</span>
+              <span className="shabbat-time">{selectedShabbat.candle}</span>
+            </div>
+          )}
+          {selectedShabbat && !selectedShabbat.isFriday && selectedShabbat.havdalah && (
+            <div className="panel-shabbat-exit">
+              <span>✨</span>
+              <span>צאת שבת</span>
+              <span className="shabbat-time">{selectedShabbat.havdalah}</span>
+            </div>
+          )}
           <EventList events={evsByDate(selectedDate)} onDelete={deleteEvent} onView={(e) => { setViewEvent(e); setModal('view') }} />
         </div>
 
