@@ -129,20 +129,37 @@ export default function CalendarApp() {
         if (!res.ok) return
         const data = await res.json()
         if (!data.access_token) return
+
+        // Try localStorage first
         let email = '', name = ''
         try {
           const saved = JSON.parse(localStorage.getItem('gc_accounts') ?? '[]')
           email = saved[i]?.email ?? ''
           name  = saved[i]?.name  ?? ''
         } catch {}
-        if (!email) return
+
+        // If no email in localStorage — ask Google directly
+        if (!email) {
+          try {
+            const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo',
+              { headers: { Authorization: `Bearer ${data.access_token}` } })
+            const user = await userRes.json()
+            email = user.email ?? ''
+            name  = user.name  ?? ''
+          } catch {}
+        }
+
+        if (!email) return  // really can't identify this account
+
         setAccounts(prev => {
           const updated = [...prev]
           updated[i] = { token: data.access_token, email, name }
+          // Save email/name to localStorage for next time
+          const forStorage = updated.map(a => a ? { email: a.email, name: a.name } : null)
+          localStorage.setItem('gc_accounts', JSON.stringify(forStorage))
           return updated
         })
-        // Fetch events with longer delay to ensure state is settled
-        setTimeout(() => fetchEventsRef.current?.(data.access_token, i), 800 * (i + 1))
+        setTimeout(() => fetchEventsRef.current?.(data.access_token, i), 600 * (i + 1))
       } catch {}
     })
 
