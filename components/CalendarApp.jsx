@@ -257,10 +257,7 @@ export default function CalendarApp() {
     return m
   })()
 
-  const weekDays = (() => {
-    const s = new Date(today); s.setDate(today.getDate() - today.getDay())
-    return Array.from({ length: 7 }, (_, i) => addDays(s, i))
-  })()
+
 
   const renderCells = () => {
     const y = currentMonth.getFullYear(), mo = currentMonth.getMonth()
@@ -435,33 +432,7 @@ export default function CalendarApp() {
             </div>
           </div>
 
-          <div className="week-strip">
-            <div className="week-strip-title">· השבוע ·</div>
-            <div className="week-days">
-              {weekDays.map((d, i) => {
-                const evs   = evsByDate(d)
-                const isT   = sameDayStr(d, today)
-                const isSel = sameDayStr(d, selectedDate)
-                const hday  = getHoliday(d)
-                return (
-                  <div key={i} className={`week-day${isT?' today':''}${isSel?' selected':''}`}
-                    onClick={() => setSelectedDate(d)}>
-                    <div className="week-day-name">{DAYS_SHORT[d.getDay()]}</div>
-                    <div className="week-day-num">{d.getDate()}</div>
-                    <div className="week-day-heb">{formatHebrewDayShort(d).split(' ')[0]}</div>
-                    {hday && <div className="week-holiday" title={hday.name}>{hday.emoji}</div>}
-                    {evs.slice(0,2).map((e,j) => (
-                      <div key={j} className="week-event" style={{ borderRightColor: e.color }}>
-                        {toTime(e.start) && <span>{toTime(e.start)}&thinsp;</span>}
-                        <span>{e.title}</span>
-                      </div>
-                    ))}
-                    {evs.length > 2 && <div className="week-more">+{evs.length-2}</div>}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
+
         </div>
 
         {/* ── LEFT — Tomorrow ── */}
