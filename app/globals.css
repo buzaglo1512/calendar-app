@@ -177,6 +177,25 @@ html, body {
   color: var(--holiday); background: #fef2f2; border-bottom: 1px solid #fecaca; flex-shrink: 0;
 }
 
+.birthday-banner {
+  display: flex; align-items: center; justify-content: center;
+  padding: 7px 10px;
+  font-size: 0.88rem; font-weight: 800;
+  background: linear-gradient(135deg, #fff0f6, #fff9db, #f0fff4, #e7f5ff);
+  background-size: 300% 300%;
+  animation: birthday-pulse 0.6s ease-in-out infinite, rainbow-bg 3s ease infinite;
+  border-bottom: 2px solid #ffd93d;
+  flex-shrink: 0;
+  letter-spacing: 1px;
+  color: #862e9c;
+}
+
+@keyframes rainbow-bg {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
 .panel-shabbat-entry {
   display: flex; align-items: center; gap: 6px;
   padding: 5px 10px; font-size: 0.75rem; font-weight: 600;
