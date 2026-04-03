@@ -70,6 +70,20 @@ html, body {
   font-size: 0.72rem; font-weight: 700; color: var(--accent-green); white-space: nowrap;
 }
 
+.header-shabbat {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 0.67rem; font-weight: 600;
+  color: #7c3aed;
+  white-space: nowrap;
+  background: #f5f3ff;
+  border: 1px solid #ddd6fe;
+  border-radius: 8px;
+  padding: 2px 7px;
+  margin-top: 1px;
+}
+.shabbat-icon { font-size: 0.75rem; }
+.shabbat-sep  { color: #c4b5fd; }
+
 /* CENTER zone — weather */
 .header-weather {
   display: flex; align-items: center; justify-content: center;
