@@ -26,10 +26,10 @@ const WMO = {
   1: { icon: '🌤️',label: 'בהיר בעיקר',  anim: 'float'     },
   2: { icon: '⛅', label: 'מעורב',        anim: 'float'     },
   3: { icon: '☁️', label: 'מעונן',        anim: 'drift'     },
-  6: { icon: '🟤',  label: 'אבק',          anim: 'pulse-fade'},
-  7: { icon: '🟤',  label: 'אבק',          anim: 'pulse-fade'},
-  8: { icon: '🟤',  label: 'סופת אבק',    anim: 'pulse-fade'},
-  9: { icon: '🟤',  label: 'סופת אבק',    anim: 'pulse-fade'},
+  6: { icon: '🌪️', label: 'אבק',          anim: 'pulse-fade'},
+  7: { icon: '🌪️', label: 'אבק',          anim: 'pulse-fade'},
+  8: { icon: '🌪️', label: 'סופת אבק',    anim: 'pulse-fade'},
+  9: { icon: '🌪️', label: 'סופת אבק',    anim: 'pulse-fade'},
  45: { icon: '🌫️',label: 'אובך',         anim: 'pulse-fade'},
  48: { icon: '🌫️',label: 'אובך כבד',     anim: 'pulse-fade'},
  51: { icon: '🌦️',label: 'ממטר קל',      anim: 'rain-drip' },
@@ -130,13 +130,25 @@ export default function CalendarApp() {
           `&timezone=auto&forecast_days=5`
         )
         const d = await r.json()
-        // Smart visibility detection
+        // Smart visibility + dust detection
         const visibility = d.current.visibility ?? 99999
         const rawCode    = d.current.weather_code
-        let finalCode = rawCode
-        if (visibility < 2000)       finalCode = 48  // heavy fog
-        else if (visibility < 5000)  finalCode = 45  // fog
-        else if (visibility < 10000 && rawCode <= 3) finalCode = 7  // dust/haze (clear sky but low vis)
+        let finalCode    = rawCode
+        if (visibility < 2000)                       finalCode = 48
+        else if (visibility < 5000)                  finalCode = 45
+        else if (visibility < 10000 && rawCode <= 3) finalCode = 7
+
+        // Dust via Air Quality API
+        try {
+          const aqRes = await fetch(
+            `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lng}&current=dust&timezone=auto`
+          )
+          const aqData = await aqRes.json()
+          const dust = aqData?.current?.dust ?? 0
+          if (dust > 50)  finalCode = 7
+          if (dust > 200) finalCode = 8
+        } catch {}
+
         setWeather({ temp: Math.round(d.current.temperature_2m), max: Math.round(d.daily.temperature_2m_max[0]), min: Math.round(d.daily.temperature_2m_min[0]), code: finalCode })
         setForecast(Array.from({ length: 4 }, (_, i) => ({
           date: new Date(d.daily.time[i+1] + 'T12:00:00'),
@@ -193,10 +205,17 @@ export default function CalendarApp() {
 
   // Check for birthday on selected date
   useEffect(() => {
-    const hasBirthday = evsByDate(selectedDate).some(e => isBirthday(e.title))
+    const key = toKey(selectedDate)
+    const hasBirthday = events
+      .filter(e => isoDate(e.start) === key)
+      .some(e => isBirthday(e.title))
     if (hasBirthday) {
-      setShowConfetti(true)
-      setTimeout(() => setShowConfetti(false), 5000)
+      setShowConfetti(false)
+      // Small delay to restart animation if clicking same day again
+      setTimeout(() => {
+        setShowConfetti(true)
+        setTimeout(() => setShowConfetti(false), 6000)
+      }, 50)
     } else {
       setShowConfetti(false)
     }
