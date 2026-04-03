@@ -70,20 +70,6 @@ html, body {
   font-size: 0.72rem; font-weight: 700; color: var(--accent-green); white-space: nowrap;
 }
 
-.header-shabbat {
-  display: flex; align-items: center; gap: 4px;
-  font-size: 0.67rem; font-weight: 600;
-  color: #7c3aed;
-  white-space: nowrap;
-  background: #f5f3ff;
-  border: 1px solid #ddd6fe;
-  border-radius: 8px;
-  padding: 2px 7px;
-  margin-top: 1px;
-}
-.shabbat-icon { font-size: 0.75rem; }
-.shabbat-sep  { color: #c4b5fd; }
-
 /* CENTER zone — weather */
 .header-weather {
   display: flex; align-items: center; justify-content: center;
@@ -179,6 +165,31 @@ html, body {
 .panel-holiday {
   padding: 3px 10px; font-size: 0.7rem; font-weight: 600;
   color: var(--holiday); background: #fef2f2; border-bottom: 1px solid #fecaca; flex-shrink: 0;
+}
+
+.panel-shabbat-entry {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 10px; font-size: 0.75rem; font-weight: 600;
+  color: #6d28d9;
+  background: linear-gradient(90deg, #f5f3ff 0%, #ede9fe 100%);
+  border-bottom: 1px solid #ddd6fe;
+  flex-shrink: 0;
+}
+
+.panel-shabbat-exit {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 10px; font-size: 0.75rem; font-weight: 600;
+  color: #1d4ed8;
+  background: linear-gradient(90deg, #eff6ff 0%, #dbeafe 100%);
+  border-bottom: 1px solid #bfdbfe;
+  flex-shrink: 0;
+}
+
+.shabbat-time {
+  margin-right: auto;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
 }
 
 .add-btn {
