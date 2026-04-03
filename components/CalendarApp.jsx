@@ -9,7 +9,16 @@ import { formatHebrewDate, formatHebrewDayShort, getHoliday } from './hebrewCale
 const DAYS_SHORT  = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש']
 const DAY_PREFIX  = ['יום ראשון', 'יום שני', 'יום שלישי', 'יום רביעי', 'יום חמישי', 'יום שישי', 'שבת']
 const MONTHS      = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר']
-const ACCT_COLORS = ['#5a7a3a', '#2563eb']
+// Tiberias fixed coordinates (lat, lng)
+const TIBERIAS = { lat: 32.794, lng: 35.530 }
+
+// 3 accounts: אלירן=green, לילך=pink/purple, טאבלט=blue
+const ACCOUNTS_CONFIG = [
+  { name: 'אלירן',  color: '#16a34a' },
+  { name: 'לילך',   color: '#db2777' },
+  { name: 'טאבלט', color: '#2563eb' },
+]
+const ACCT_COLORS = ACCOUNTS_CONFIG.map(a => a.color)
 const WEEK_HEB    = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳']
 
 const WMO = {
@@ -51,7 +60,7 @@ const addDays = (d,n)  => { const r=new Date(d); r.setDate(r.getDate()+n); retur
 // Main component
 // =====================================================================
 export default function CalendarApp() {
-  const [accounts, setAccounts]         = useState([null, null])
+  const [accounts, setAccounts]         = useState([null, null, null])
   const [events, setEvents]             = useState([])
   const [currentMonth, setCurrentMonth] = useState(() => new Date())
   const [selectedDate, setSelectedDate] = useState(() => new Date())
@@ -96,7 +105,9 @@ export default function CalendarApp() {
 
   // Weather + 4-day forecast + Shabbat times
   useEffect(() => {
-    navigator.geolocation?.getCurrentPosition(async ({ coords: { latitude: lat, longitude: lng } }) => {
+    // Use Tiberias fixed coords — change TIBERIAS constant to move location
+    ;(async () => {
+      const { lat, lng } = TIBERIAS
       setCoords({ lat, lng })
       // Weather
       try {
@@ -116,7 +127,7 @@ export default function CalendarApp() {
         })))
       } catch {}
 
-    })
+    })()
   }, [])
 
   const toast = (msg, type='ok') => { setNotif({ msg, type }); setTimeout(() => setNotif(null), 3000) }
@@ -430,12 +441,13 @@ export default function CalendarApp() {
               {acc ? (
                 <>
                   <span className="account-dot" style={{ background: ACCT_COLORS[i] }} />
+                  <span className="account-name">{ACCOUNTS_CONFIG[i].name}</span>
                   <span className="account-email">{acc.email}</span>
                   {loadingIdx === i && <span className="spinner">↻</span>}
                   <button className="account-x" onClick={() => disconnectAccount(i)} title="נתק">✕</button>
                 </>
               ) : (
-                <button className="connect-btn" onClick={() => connectAccount(i)}>+ חשבון {i+1}</button>
+                <button className="connect-btn" onClick={() => connectAccount(i)}>+ {ACCOUNTS_CONFIG[i].name}</button>
               )}
             </div>
           ))}
