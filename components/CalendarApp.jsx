@@ -381,12 +381,11 @@ export default function CalendarApp() {
       setEvents(prev => {
         const others = prev.filter(e => e.accountIndex !== idx)
         const allNew = [...others, ...allEvs]
+        // Deduplicate by event ID — same event in shared calendar appears once
         const seen = new Set()
         return allNew.filter(e => {
-          if (!e.allDay) return true
-          const key = `${e.title}__${e.start?.split('T')[0] ?? e.start}`
-          if (seen.has(key)) return false
-          seen.add(key)
+          if (seen.has(e.id)) return false
+          seen.add(e.id)
           return true
         })
       })
