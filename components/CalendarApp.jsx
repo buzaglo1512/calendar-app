@@ -337,17 +337,18 @@ export default function CalendarApp() {
 
   const fetchEvents = useCallback(async (token, idx) => {
     setLoadingIdx(idx)
+    const acctName = ACCOUNTS_CONFIG[idx]?.name ?? `חשבון ${idx+1}`
     try {
       const from = new Date(now.getFullYear(), now.getMonth()-2, 1).toISOString()
       const to   = new Date(now.getFullYear(), now.getMonth()+4, 0).toISOString()
       const calListRes = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=50',
         { headers: { Authorization: `Bearer ${token}` } })
-      if (calListRes.status === 401) { disconnectAccount(idx); toast('פג תוקף ההרשאה', 'error'); return }
+      if (calListRes.status === 401) { disconnectAccount(idx); toast(`${acctName}: פג תוקף`, 'error'); return }
+      if (!calListRes.ok) { toast(`${acctName}: שגיאה ${calListRes.status}`, 'error'); return }
       const calList = await calListRes.json()
       const allEvs = []
       for (const cal of calList.items ?? []) {
         if (cal.accessRole === 'freeBusyReader') continue
-        // Skip holiday/other/birthday calendars — they duplicate across accounts
         if (cal.id?.includes('#holiday@') ||
             cal.id?.includes('#contacts@') ||
             cal.id?.includes('addressbook#') ||
@@ -359,7 +360,10 @@ export default function CalendarApp() {
           `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?` +
           `timeMin=${from}&timeMax=${to}&singleEvents=true&orderBy=startTime&maxResults=500`,
           { headers: { Authorization: `Bearer ${token}` } })
-        if (!evRes.ok) continue
+        if (!evRes.ok) {
+          toast(`${acctName}/${cal.summary}: שגיאה ${evRes.status}`, 'error')
+          continue
+        }
         const evData = await evRes.json()
         for (const item of evData.items ?? []) {
           allEvs.push({
@@ -375,24 +379,19 @@ export default function CalendarApp() {
         }
       }
       setEvents(prev => {
-        // Merge: remove old events from this account, add new ones
         const others = prev.filter(e => e.accountIndex !== idx)
         const allNew = [...others, ...allEvs]
-        // Only deduplicate all-day events (holidays/recurring) across accounts
-        // Keep ALL timed events (they are personal appointments)
         const seen = new Set()
         return allNew.filter(e => {
-          // Timed events — always keep, never deduplicate
           if (!e.allDay) return true
-          // All-day events — deduplicate by title+date across accounts
           const key = `${e.title}__${e.start?.split('T')[0] ?? e.start}`
           if (seen.has(key)) return false
           seen.add(key)
           return true
         })
       })
-      toast(`✓ נטענו ${allEvs.length} אירועים`)
-    } catch { toast('שגיאה בטעינת אירועים', 'error') }
+      toast(`✓ ${acctName}: ${allEvs.length} אירועים`)
+    } catch (e) { toast(`${acctName}: שגיאה בטעינה`, 'error') }
     finally  { setLoadingIdx(null) }
   }, [disconnectAccount, now])
 
