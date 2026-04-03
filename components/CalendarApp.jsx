@@ -324,9 +324,13 @@ export default function CalendarApp() {
         // Merge: remove old events from this account, add new ones
         const others = prev.filter(e => e.accountIndex !== idx)
         const allNew = [...others, ...allEvs]
-        // Deduplicate across accounts by title+date (keep first occurrence)
+        // Only deduplicate all-day events (holidays/recurring) across accounts
+        // Keep ALL timed events (they are personal appointments)
         const seen = new Set()
         return allNew.filter(e => {
+          // Timed events — always keep, never deduplicate
+          if (!e.allDay) return true
+          // All-day events — deduplicate by title+date across accounts
           const key = `${e.title}__${e.start?.split('T')[0] ?? e.start}`
           if (seen.has(key)) return false
           seen.add(key)
