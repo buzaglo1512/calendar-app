@@ -3,16 +3,23 @@ import { cookies } from 'next/headers'
 
 const CLIENT_ID     = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET
-
 const SCOPE = 'https://www.googleapis.com/auth/calendar openid email profile'
 
-function getBaseUrl(request) {
-  const url = new URL(request.url)
-  return `${url.protocol}//${url.host}`
+const COOKIE_OPTS = {
+  httpOnly: true,
+  secure:   true,
+  sameSite: 'lax',
+  maxAge:   60 * 60 * 24 * 365, // 1 year
+  path:     '/',
 }
 
-function getRedirectUri(request) {
-  return `${getBaseUrl(request)}/api/auth`
+function baseUrl(request) {
+  const u = new URL(request.url)
+  return `${u.protocol}//${u.host}`
+}
+
+function redirectUri(request) {
+  return `${baseUrl(request)}/api/auth`
 }
 
 export async function GET(request) {
@@ -20,11 +27,11 @@ export async function GET(request) {
   const action  = searchParams.get('action')
   const account = searchParams.get('account') ?? '0'
 
-  // ── LOGIN: redirect to Google OAuth ──────────────────────────
+  // ── LOGIN ─────────────────────────────────────────────────────
   if (action === 'login') {
     const url = new URL('https://accounts.google.com/o/oauth2/v2/auth')
     url.searchParams.set('client_id',     CLIENT_ID)
-    url.searchParams.set('redirect_uri',  getRedirectUri(request))
+    url.searchParams.set('redirect_uri',  redirectUri(request))
     url.searchParams.set('response_type', 'code')
     url.searchParams.set('scope',         SCOPE)
     url.searchParams.set('access_type',   'offline')
@@ -33,11 +40,11 @@ export async function GET(request) {
     return NextResponse.redirect(url.toString())
   }
 
-  // ── CALLBACK: Google redirects here with ?code= ───────────────
+  // ── CALLBACK ──────────────────────────────────────────────────
   if (searchParams.get('code')) {
     const code  = searchParams.get('code')
     const state = searchParams.get('state') ?? '0'
-    const base  = getBaseUrl(request)
+    const base  = baseUrl(request)
 
     // Exchange code for tokens
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
@@ -47,7 +54,7 @@ export async function GET(request) {
         code,
         client_id:     CLIENT_ID,
         client_secret: CLIENT_SECRET,
-        redirect_uri:  getRedirectUri(request),
+        redirect_uri:  redirectUri(request),
         grant_type:    'authorization_code',
       }),
     })
@@ -60,40 +67,32 @@ export async function GET(request) {
     // Get user info
     let email = '', name = ''
     try {
-      const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo',
+      const u = await fetch('https://www.googleapis.com/oauth2/v3/userinfo',
         { headers: { Authorization: `Bearer ${tokens.access_token}` } })
-      const user = await userRes.json()
+      const user = await u.json()
       email = user.email ?? ''
       name  = user.name  ?? ''
     } catch {}
 
-    // Redirect back to app with access token in URL
-    const redirectUrl = new URL(`${base}/`)
-    redirectUrl.searchParams.set('auth_success', '1')
-    redirectUrl.searchParams.set('account', state)
-    redirectUrl.searchParams.set('email',   email)
-    redirectUrl.searchParams.set('name',    name)
-    redirectUrl.searchParams.set('token',   tokens.access_token)
+    // Build redirect back to app
+    const dest = new URL(`${base}/`)
+    dest.searchParams.set('auth_success', '1')
+    dest.searchParams.set('account', state)
+    dest.searchParams.set('email',   email)
+    dest.searchParams.set('name',    name)
+    dest.searchParams.set('token',   tokens.access_token)
 
-    const response = NextResponse.redirect(redirectUrl.toString())
-
-    // Save refresh token in secure HTTP-only cookie (1 year)
+    // ✅ Set cookie on the RESPONSE (correct Next.js 15 way)
+    const response = NextResponse.redirect(dest.toString())
     if (tokens.refresh_token) {
-      const cookieStore = await cookies()
-      cookieStore.set(`gc_refresh_${state}`, tokens.refresh_token, {
-        httpOnly: true,
-        secure:   true,
-        sameSite: 'lax',
-        maxAge:   60 * 60 * 24 * 365,
-        path:     '/',
-      })
+      response.cookies.set(`gc_refresh_${state}`, tokens.refresh_token, COOKIE_OPTS)
     }
-
     return response
   }
 
-  // ── REFRESH: get new access token silently ────────────────────
+  // ── REFRESH ───────────────────────────────────────────────────
   if (action === 'refresh') {
+    // ✅ Read cookie from request (correct Next.js 15 way)
     const cookieStore = await cookies()
     const refreshToken = cookieStore.get(`gc_refresh_${account}`)?.value
 
@@ -114,33 +113,30 @@ export async function GET(request) {
     const tokens = await tokenRes.json()
 
     if (!tokens.access_token) {
-      // Refresh token expired/revoked — clear cookie
-      const cookieStore2 = await cookies()
-      cookieStore2.delete(`gc_refresh_${account}`)
-      return NextResponse.json({ error: 'refresh_failed' }, { status: 401 })
+      // Revoked — clear cookie
+      const res = NextResponse.json({ error: 'refresh_failed' }, { status: 401 })
+      res.cookies.delete(`gc_refresh_${account}`)
+      return res
     }
 
-    return NextResponse.json({
-      access_token: tokens.access_token,
-      expires_in:   tokens.expires_in ?? 3600,
-    })
+    return NextResponse.json({ access_token: tokens.access_token })
   }
 
-  // ── LOGOUT: clear refresh token cookie ───────────────────────
+  // ── LOGOUT ────────────────────────────────────────────────────
   if (action === 'logout') {
-    const cookieStore = await cookies()
-    cookieStore.delete(`gc_refresh_${account}`)
-    return NextResponse.json({ ok: true })
+    const res = NextResponse.json({ ok: true })
+    res.cookies.delete(`gc_refresh_${account}`)
+    return res
   }
 
-  // ── STATUS: check which accounts have refresh tokens ─────────
+  // ── STATUS ────────────────────────────────────────────────────
   if (action === 'status') {
     const cookieStore = await cookies()
-    const status = [0, 1, 2].map(i => ({
-      index:      i,
-      connected:  !!cookieStore.get(`gc_refresh_${i}`)?.value,
+    const accounts = [0, 1, 2].map(i => ({
+      index:     i,
+      connected: !!cookieStore.get(`gc_refresh_${i}`)?.value,
     }))
-    return NextResponse.json({ accounts: status })
+    return NextResponse.json({ accounts })
   }
 
   return NextResponse.json({ error: 'unknown_action' }, { status: 400 })
