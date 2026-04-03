@@ -99,7 +99,7 @@ export default function CalendarApp() {
 
   // On mount: handle OAuth callback params + auto-refresh saved tokens
   useEffect(() => {
-    const params    = new URLSearchParams(window.location.search)
+    const params     = new URLSearchParams(window.location.search)
     const isCallback = params.get('auth_success') === '1'
     const newIdx     = isCallback ? parseInt(params.get('account') ?? '0') : -1
 
@@ -117,69 +117,69 @@ export default function CalendarApp() {
           return updated
         })
         window.history.replaceState({}, '', '/')
-        setTimeout(() => fetchEventsRef.current?.(token, newIdx), 500)
       }
     }
 
-    // Auto-refresh ALL other accounts from server cookies (runs always)
-    ;[0, 1, 2].forEach(async (i) => {
-      if (i === newIdx) return  // skip the one we just connected
-      try {
-        const res  = await fetch(`/api/auth?action=refresh&account=${i}`)
-        if (!res.ok) return
-        const data = await res.json()
-        if (!data.access_token) return
+    // Refresh ALL accounts from server cookies, collect tokens, then fetch events
+    const initAll = async () => {
+      const tokenMap = {}  // { index: accessToken }
 
-        // Try localStorage first
-        let email = '', name = ''
+      await Promise.all([0, 1, 2].map(async (i) => {
         try {
-          const saved = JSON.parse(localStorage.getItem('gc_accounts') ?? '[]')
-          email = saved[i]?.email ?? ''
-          name  = saved[i]?.name  ?? ''
-        } catch {}
+          const res = await fetch(`/api/auth?action=refresh&account=${i}`)
+          if (!res.ok) return
+          const data = await res.json()
+          if (!data.access_token) return
 
-        // If no email in localStorage — ask Google directly
-        if (!email) {
+          // Get email/name
+          let email = '', name = ''
           try {
-            const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo',
-              { headers: { Authorization: `Bearer ${data.access_token}` } })
-            const user = await userRes.json()
-            email = user.email ?? ''
-            name  = user.name  ?? ''
+            const saved = JSON.parse(localStorage.getItem('gc_accounts') ?? '[]')
+            email = saved[i]?.email ?? ''
+            name  = saved[i]?.name  ?? ''
           } catch {}
-        }
 
-        if (!email) return  // really can't identify this account
-
-        setAccounts(prev => {
-          const updated = [...prev]
-          updated[i] = { token: data.access_token, email, name }
-          // Save email/name to localStorage for next time
-          const forStorage = updated.map(a => a ? { email: a.email, name: a.name } : null)
-          localStorage.setItem('gc_accounts', JSON.stringify(forStorage))
-          return updated
-        })
-        setTimeout(() => fetchEventsRef.current?.(data.access_token, i), 600 * (i + 1))
-      } catch {}
-    })
-
-    // After everything settles, do a full refresh of all connected accounts
-    setTimeout(() => {
-      try {
-        const saved = JSON.parse(localStorage.getItem('gc_accounts') ?? '[]')
-        saved.forEach((a, i) => {
-          if (a?.email) {
-            fetch(`/api/auth?action=refresh&account=${i}`)
-              .then(r => r.ok ? r.json() : null)
-              .then(data => {
-                if (data?.access_token) {
-                  fetchEventsRef.current?.(data.access_token, i)
-                }
-              }).catch(() => {})
+          // If callback for this account, use URL params
+          if (i === newIdx) {
+            email = decodeURIComponent(params.get('email') ?? '') || email
+            name  = decodeURIComponent(params.get('name')  ?? '') || name
+            const urlToken = params.get('token')
+            tokenMap[i] = urlToken || data.access_token
+          } else {
+            tokenMap[i] = data.access_token
           }
-        })
-      } catch {}
-    }, 3000)
+
+          // If still no email, ask Google
+          if (!email) {
+            try {
+              const u = await fetch('https://www.googleapis.com/oauth2/v3/userinfo',
+                { headers: { Authorization: `Bearer ${tokenMap[i]}` } })
+              const user = await u.json()
+              email = user.email ?? ''
+              name  = user.name  ?? ''
+            } catch {}
+          }
+
+          if (!email) return
+
+          setAccounts(prev => {
+            const updated = [...prev]
+            updated[i] = { token: tokenMap[i], email, name }
+            const forStorage = updated.map(a => a ? { email: a.email, name: a.name } : null)
+            localStorage.setItem('gc_accounts', JSON.stringify(forStorage))
+            return updated
+          })
+        } catch {}
+      }))
+
+      // After all accounts are set — fetch events for all
+      await new Promise(r => setTimeout(r, 800))
+      Object.entries(tokenMap).forEach(([i, token]) => {
+        fetchEventsRef.current?.(token, parseInt(i))
+      })
+    }
+
+    initAll()
   }, []) // eslint-disable-line
 
   // Persist — only load todos, NOT accounts (accounts restored via server cookies)
