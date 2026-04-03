@@ -165,11 +165,10 @@ export default function CalendarApp() {
     }, 3000)
   }, []) // eslint-disable-line
 
-  // Persist
+  // Persist — only load todos, NOT accounts (accounts restored via server cookies)
   useEffect(() => {
     try {
-      const a = localStorage.getItem('gc_accounts'); if (a) setAccounts(JSON.parse(a))
-      const t = localStorage.getItem('gc_todos');    if (t) setTodos(JSON.parse(t))
+      const t = localStorage.getItem('gc_todos'); if (t) setTodos(JSON.parse(t))
     } catch {}
   }, [])
 
