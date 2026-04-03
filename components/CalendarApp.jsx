@@ -122,27 +122,32 @@ export default function CalendarApp() {
   const toast = (msg, type='ok') => { setNotif({ msg, type }); setTimeout(() => setNotif(null), 3000) }
 
   // Fetch Shabbat times for a specific Friday or Saturday
+  // Uses gy/gm/gd params — the correct Hebcal way to request a specific week
   const fetchShabbatForDate = useCallback(async (date) => {
     const day = date.getDay() // 5=Fri, 6=Sat
     if (day !== 5 && day !== 6) { setSelectedShabbat(null); return }
     if (!coords) return
-    // Find the Friday of that week
+    // Always fetch by the Friday of that week
     const friday = new Date(date)
     if (day === 6) friday.setDate(friday.getDate() - 1)
-    const dateStr = toKey(friday)
+    const gy = friday.getFullYear()
+    const gm = friday.getMonth() + 1
+    const gd = friday.getDate()
     try {
       const res = await fetch(
-        `https://www.hebcal.com/shabbat?cfg=json&latitude=${coords.lat}&longitude=${coords.lng}` +
-        `&tzid=Asia/Jerusalem&m=50&b=18&date=${dateStr}`
+        `https://www.hebcal.com/shabbat?cfg=json` +
+        `&latitude=${coords.lat}&longitude=${coords.lng}` +
+        `&tzid=Asia/Jerusalem&m=50&b=18` +
+        `&gy=${gy}&gm=${gm}&gd=${gd}`
       )
       const data = await res.json()
-      const candle   = data.items?.find(i => i.category === 'candles')
-      const havdalah = data.items?.find(i => i.category === 'havdalah')
       const fmt = (iso) => {
         if (!iso) return null
         const d = new Date(iso)
         return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
       }
+      const candle   = data.items?.find(i => i.category === 'candles')
+      const havdalah = data.items?.find(i => i.category === 'havdalah')
       setSelectedShabbat({
         candle:   fmt(candle?.date),
         havdalah: fmt(havdalah?.date),
@@ -151,7 +156,7 @@ export default function CalendarApp() {
     } catch { setSelectedShabbat(null) }
   }, [coords])
 
-  // Fetch when selectedDate changes to Fri/Sat
+  // Re-fetch when selected date OR coords change (coords arrive async after geolocation)
   useEffect(() => {
     fetchShabbatForDate(selectedDate)
   }, [selectedDate, fetchShabbatForDate])
