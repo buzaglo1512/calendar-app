@@ -58,6 +58,7 @@ export default function CalendarApp() {
   const [now, setNow]                   = useState(() => new Date())
   const [weather, setWeather]           = useState(null)
   const [forecast, setForecast]         = useState([])
+  const [shabbat, setShabbat]           = useState(null)
   const [apisLoaded, setApisLoaded]     = useState(false)
   const [loadingIdx, setLoadingIdx]     = useState(null)
   const [notif, setNotif]               = useState(null)
@@ -92,9 +93,10 @@ export default function CalendarApp() {
     document.head.appendChild(s)
   }, [])
 
-  // Weather + 4-day forecast (Open-Meteo, free)
+  // Weather + 4-day forecast + Shabbat times
   useEffect(() => {
     navigator.geolocation?.getCurrentPosition(async ({ coords: { latitude: lat, longitude: lng } }) => {
+      // Weather
       try {
         const r = await fetch(
           `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
@@ -110,6 +112,23 @@ export default function CalendarApp() {
           min:  Math.round(d.daily.temperature_2m_min[i+1]),
           code: d.daily.weather_code[i+1],
         })))
+      } catch {}
+      // Shabbat times via Hebcal (free, no key)
+      try {
+        const s = await fetch(
+          `https://www.hebcal.com/shabbat?cfg=json&latitude=${lat}&longitude=${lng}&tzid=Asia/Jerusalem&m=50&b=18`
+        )
+        const sd = await s.json()
+        const candle   = sd.items?.find(i => i.category === 'candles')
+        const havdalah = sd.items?.find(i => i.category === 'havdalah')
+        const fmt = (iso) => {
+          if (!iso) return null
+          const d = new Date(iso)
+          return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+        }
+        if (candle || havdalah) {
+          setShabbat({ candle: fmt(candle?.date), havdalah: fmt(havdalah?.date) })
+        }
       } catch {}
     })
   }, [])
@@ -340,6 +359,14 @@ export default function CalendarApp() {
             <div className="header-date-heb">
               {hebrewNow.day} ב{hebrewNow.month} {hebrewNow.year}
             </div>
+            {shabbat && (
+              <div className="header-shabbat">
+                <span className="shabbat-icon">🕯️</span>
+                {shabbat.candle   && <span>כניסה {shabbat.candle}</span>}
+                {shabbat.candle && shabbat.havdalah && <span className="shabbat-sep">·</span>}
+                {shabbat.havdalah && <span>יציאה {shabbat.havdalah}</span>}
+              </div>
+            )}
           </div>
         </div>
 
