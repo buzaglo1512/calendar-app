@@ -26,8 +26,12 @@ const WMO = {
   1: { icon: '🌤️',label: 'בהיר בעיקר',  anim: 'float'     },
   2: { icon: '⛅', label: 'מעורב',        anim: 'float'     },
   3: { icon: '☁️', label: 'מעונן',        anim: 'drift'     },
- 45: { icon: '🌫️',label: 'ערפל',         anim: 'pulse-fade'},
- 48: { icon: '🌫️',label: 'ערפל',         anim: 'pulse-fade'},
+  6: { icon: '🟤',  label: 'אבק',          anim: 'pulse-fade'},
+  7: { icon: '🟤',  label: 'אבק',          anim: 'pulse-fade'},
+  8: { icon: '🟤',  label: 'סופת אבק',    anim: 'pulse-fade'},
+  9: { icon: '🟤',  label: 'סופת אבק',    anim: 'pulse-fade'},
+ 45: { icon: '🌫️',label: 'אובך',         anim: 'pulse-fade'},
+ 48: { icon: '🌫️',label: 'אובך כבד',     anim: 'pulse-fade'},
  51: { icon: '🌦️',label: 'ממטר קל',      anim: 'rain-drip' },
  53: { icon: '🌧️',label: 'ממטר',         anim: 'rain-drip' },
  61: { icon: '🌧️',label: 'גשם קל',       anim: 'rain-drip' },
@@ -51,6 +55,13 @@ const getWMO = (c) => {
 // =====================================================================
 // Helpers
 // =====================================================================
+// Birthday detection
+const BIRTHDAY_WORDS = ['יום הולדת', 'יומולדת', 'יום-הולדת', 'birthday', 'bday', 'b-day']
+const isBirthday = (title) => {
+  const t = (title ?? '').toLowerCase()
+  return BIRTHDAY_WORDS.some(w => t.includes(w.toLowerCase()))
+}
+
 const toKey   = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 const toTime  = (iso) => { if (!iso?.includes('T')) return ''; const d=new Date(iso); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` }
 const isoDate = (iso) => iso?.split('T')[0] ?? iso ?? ''
@@ -77,6 +88,7 @@ export default function CalendarApp() {
   const [modal, setModal]               = useState(null)
   const [addForm, setAddForm]           = useState({ title:'', date:'', time:'09:00', endTime:'10:00', allDay:false, accountIndex:0 })
   const [viewEvent, setViewEvent]       = useState(null)
+  const [showConfetti, setShowConfetti]  = useState(false)
   const refreshTimerRef                 = useRef(null)
 
   const today    = now
@@ -113,12 +125,19 @@ export default function CalendarApp() {
       try {
         const r = await fetch(
           `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
-          `&current=temperature_2m,weather_code` +
+          `&current=temperature_2m,weather_code,visibility` +
           `&daily=temperature_2m_max,temperature_2m_min,weather_code` +
           `&timezone=auto&forecast_days=5`
         )
         const d = await r.json()
-        setWeather({ temp: Math.round(d.current.temperature_2m), max: Math.round(d.daily.temperature_2m_max[0]), min: Math.round(d.daily.temperature_2m_min[0]), code: d.current.weather_code })
+        // Smart visibility detection
+        const visibility = d.current.visibility ?? 99999
+        const rawCode    = d.current.weather_code
+        let finalCode = rawCode
+        if (visibility < 2000)       finalCode = 48  // heavy fog
+        else if (visibility < 5000)  finalCode = 45  // fog
+        else if (visibility < 10000 && rawCode <= 3) finalCode = 7  // dust/haze (clear sky but low vis)
+        setWeather({ temp: Math.round(d.current.temperature_2m), max: Math.round(d.daily.temperature_2m_max[0]), min: Math.round(d.daily.temperature_2m_min[0]), code: finalCode })
         setForecast(Array.from({ length: 4 }, (_, i) => ({
           date: new Date(d.daily.time[i+1] + 'T12:00:00'),
           max:  Math.round(d.daily.temperature_2m_max[i+1]),
@@ -171,6 +190,17 @@ export default function CalendarApp() {
   useEffect(() => {
     fetchShabbatForDate(selectedDate)
   }, [selectedDate, fetchShabbatForDate])
+
+  // Check for birthday on selected date
+  useEffect(() => {
+    const hasBirthday = evsByDate(selectedDate).some(e => isBirthday(e.title))
+    if (hasBirthday) {
+      setShowConfetti(true)
+      setTimeout(() => setShowConfetti(false), 5000)
+    } else {
+      setShowConfetti(false)
+    }
+  }, [selectedDate, events])
 
   // Google connect
   const connectAccount = useCallback((idx) => {
@@ -424,9 +454,37 @@ export default function CalendarApp() {
         .anim-rain-drip  { animation:rain-drip  1.2s ease-in-out infinite; display:inline-block }
         .anim-snow-fall  { animation:snow-fall  2s ease-in-out infinite alternate; display:inline-block }
         .anim-flash      { animation:flash      1.8s ease-in-out infinite; display:inline-block }
+        @keyframes confetti-fall {
+          0%   { transform: translateY(-20px) rotate(0deg);   opacity: 1; }
+          100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+        }
+        @keyframes birthday-pulse {
+          0%,100% { transform: scale(1); }
+          50%     { transform: scale(1.04); }
+        }
+        .confetti-piece {
+          position: fixed; top: -20px; width: 10px; height: 14px; border-radius: 2px;
+          animation: confetti-fall linear forwards; z-index: 999; pointer-events: none;
+        }
+        .birthday-banner {
+          animation: birthday-pulse 0.6s ease-in-out infinite;
+        }
       `}</style>
 
       {notif && <div className={`notif${notif.type==='error'?' error':''}`}>{notif.msg}</div>}
+
+      {/* Confetti */}
+      {showConfetti && Array.from({ length: 40 }, (_, i) => (
+        <div key={i} className="confetti-piece" style={{
+          left: `${Math.random() * 100}%`,
+          background: ['#ff6b6b','#ffd93d','#6bcb77','#4d96ff','#ff922b','#cc5de8'][i % 6],
+          animationDuration: `${1.5 + Math.random() * 2}s`,
+          animationDelay: `${Math.random() * 1.5}s`,
+          width:  `${8 + Math.random() * 8}px`,
+          height: `${10 + Math.random() * 8}px`,
+          borderRadius: Math.random() > 0.5 ? '50%' : '2px',
+        }} />
+      ))}
 
       {/* ============================================================ */}
       {/* HEADER                                                         */}
@@ -518,6 +576,11 @@ export default function CalendarApp() {
             <button className="add-btn" onClick={() => openAdd(selectedDate)}>+</button>
           </div>
           {(() => { const h = getHoliday(selectedDate); return h ? <div className="panel-holiday">{h.emoji} {h.name}</div> : null })()}
+          {evsByDate(selectedDate).some(e => isBirthday(e.title)) && (
+            <div className="birthday-banner">
+              🎂 יום הולדת שמח! 🎉🎈
+            </div>
+          )}
           {selectedShabbat && selectedShabbat.isFriday && selectedShabbat.candle && (
             <div className="panel-shabbat-entry">
               <span>🕯️</span>
