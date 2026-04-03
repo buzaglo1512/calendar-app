@@ -203,6 +203,35 @@ export default function CalendarApp() {
     toast('החשבון נותק')
   }, [accounts])
 
+  // Silent token refresh — runs every 45 min to keep tokens alive
+  const silentRefreshToken = useCallback((idx) => {
+    if (!apisLoaded || !window.google?.accounts?.oauth2) return
+    const acc = accounts[idx]
+    if (!acc) return
+    const client = window.google.accounts.oauth2.initTokenClient({
+      client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
+      scope: 'https://www.googleapis.com/auth/calendar openid email profile',
+      prompt: '', // empty = no prompt shown to user
+      login_hint: acc.email,
+      callback: (res) => {
+        if (!res.access_token) return
+        const updated = [...accounts]
+        updated[idx] = { ...acc, token: res.access_token }
+        setAccounts(updated)
+        fetchEvents(res.access_token, idx)
+      },
+    })
+    client.requestAccessToken()
+  }, [accounts, apisLoaded]) // eslint-disable-line
+
+  // Auto silent refresh every 45 minutes
+  useEffect(() => {
+    const t = setInterval(() => {
+      accounts.forEach((a, i) => { if (a?.token) silentRefreshToken(i) })
+    }, 45 * 60_000)
+    return () => clearInterval(t)
+  }, [accounts, silentRefreshToken])
+
   const fetchEvents = useCallback(async (token, idx) => {
     setLoadingIdx(idx)
     try {
@@ -215,6 +244,14 @@ export default function CalendarApp() {
       const allEvs = []
       for (const cal of calList.items ?? []) {
         if (cal.accessRole === 'freeBusyReader') continue
+        // Skip holiday/other/birthday calendars — they duplicate across accounts
+        if (cal.id?.includes('#holiday@') ||
+            cal.id?.includes('#contacts@') ||
+            cal.id?.includes('addressbook#') ||
+            cal.summary?.includes('Birthdays') ||
+            cal.summary?.includes('ימי הולדת') ||
+            cal.summaryOverride?.includes('Holidays')) continue
+
         const evRes = await fetch(
           `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?` +
           `timeMin=${from}&timeMax=${to}&singleEvents=true&orderBy=startTime&maxResults=500`,
@@ -234,7 +271,19 @@ export default function CalendarApp() {
           })
         }
       }
-      setEvents(prev => [...prev.filter(e => e.accountIndex !== idx), ...allEvs])
+      setEvents(prev => {
+        // Merge: remove old events from this account, add new ones
+        const others = prev.filter(e => e.accountIndex !== idx)
+        const allNew = [...others, ...allEvs]
+        // Deduplicate across accounts by title+date (keep first occurrence)
+        const seen = new Set()
+        return allNew.filter(e => {
+          const key = `${e.title}__${e.start?.split('T')[0] ?? e.start}`
+          if (seen.has(key)) return false
+          seen.add(key)
+          return true
+        })
+      })
       toast(`✓ נטענו ${allEvs.length} אירועים`)
     } catch { toast('שגיאה בטעינת אירועים', 'error') }
     finally  { setLoadingIdx(null) }
