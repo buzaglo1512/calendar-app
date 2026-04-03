@@ -295,7 +295,7 @@ export default function CalendarApp() {
 
   useEffect(() => {
     clearInterval(refreshTimerRef.current)
-    if (accounts.some(a => a?.token)) refreshTimerRef.current = setInterval(refreshAll, 10*60_000)
+    if (accounts.some(a => a?.token)) refreshTimerRef.current = setInterval(refreshAll, 2*60_000)
     return () => clearInterval(refreshTimerRef.current)
   }, [accounts, refreshAll])
 
