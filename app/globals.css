@@ -230,8 +230,8 @@ html, body {
 
 .cal-cell {
   display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
-  padding: 2px 1px; border-radius: 5px; cursor: pointer;
-  position: relative; min-width: 0; min-height: 40px;
+  padding: 3px 1px; border-radius: 5px; cursor: pointer;
+  position: relative; min-width: 0; min-height: 52px;
 }
 .cal-cell:hover:not(.empty):not(.today) { background: var(--surface-2); }
 .cal-cell.empty { cursor: default; }
@@ -240,49 +240,15 @@ html, body {
 .cal-cell.today .cal-heb-day { color: rgba(255,255,255,.7); }
 .cal-cell.selected:not(.today) { background: var(--selected-bg); outline: 2px solid var(--selected-border); outline-offset: -1px; }
 
-.cal-day-num   { font-size: 0.74rem; font-weight: 500; color: var(--text); line-height: 1; }
+.cal-day-num   { font-size: 0.82rem; font-weight: 500; color: var(--text); line-height: 1; }
 .cal-day-num.shabbat { color: var(--red); }
 .cal-day-num.holiday { color: var(--holiday); font-weight: 700; }
-.cal-heb-day   { font-size: 0.5rem; color: var(--text-muted); line-height: 1; margin-top: 1px; }
-.cal-holiday-dot { font-size: 0.58rem; line-height: 1; margin-top: 1px; }
+.cal-heb-day   { font-size: 0.58rem; color: var(--text-muted); line-height: 1; margin-top: 2px; }
+.cal-holiday-dot { font-size: 0.65rem; line-height: 1; margin-top: 2px; }
 .cal-dots { display: flex; gap: 2px; margin-top: 2px; }
 .cal-dot  { width: 4px; height: 4px; border-radius: 50%; display: block; }
 
-/* ── WEEK STRIP ──────────────────────────────────────────── */
-.week-strip {
-  background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border);
-  box-shadow: var(--shadow); padding: 5px; flex: 1; min-height: 0; overflow: hidden;
-  display: flex; flex-direction: column;
-}
-.week-strip-title {
-  font-size: 0.66rem; font-weight: 700; color: var(--text-muted);
-  text-align: center; margin-bottom: 4px; flex-shrink: 0;
-}
-.week-days {
-  display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px;
-  flex: 1; min-height: 0; overflow: hidden;
-}
-.week-day {
-  display: flex; flex-direction: column; align-items: center;
-  border-radius: var(--radius-sm); padding: 3px 2px; cursor: pointer; overflow: hidden; min-height: 0;
-}
-.week-day:hover:not(.today) { background: var(--surface-2); }
-.week-day.today    { background: var(--accent-green-bg); }
-.week-day.selected:not(.today) { background: var(--surface-2); outline: 1px solid var(--accent-green); }
 
-.week-day-name  { font-size: 0.58rem; color: var(--text-muted); font-weight: 600; }
-.week-day-num   { font-size: 0.76rem; font-weight: 700; color: var(--text); margin: 1px 0; }
-.week-day.today .week-day-num { color: var(--accent-green); }
-.week-day-heb   { font-size: 0.5rem; color: var(--text-muted); line-height: 1; }
-.week-holiday   { font-size: 0.68rem; line-height: 1; margin-top: 1px; }
-
-.week-event {
-  width: 100%; font-size: 0.5rem; color: var(--text);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  background: var(--surface-2); border-right: 2px solid var(--border);
-  border-radius: 3px; padding: 1px 3px; margin-top: 2px; text-align: right;
-}
-.week-more { font-size: 0.5rem; color: var(--text-muted); margin-top: 1px; }
 
 /* ── BOTTOM / TODOS ──────────────────────────────────────── */
 .bottom { display: flex; gap: 8px; padding: 0 8px 8px; flex-shrink: 0; }
