@@ -340,7 +340,7 @@ export default function CalendarApp() {
     const acctName = ACCOUNTS_CONFIG[idx]?.name ?? `חשבון ${idx+1}`
     try {
       const from = new Date(now.getFullYear(), now.getMonth()-2, 1).toISOString()
-      const to   = new Date(now.getFullYear(), now.getMonth()+4, 0).toISOString()
+      const to   = new Date(now.getFullYear(), now.getMonth()+18, 0).toISOString()
       const calListRes = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=50',
         { headers: { Authorization: `Bearer ${token}` } })
       if (calListRes.status === 401) { disconnectAccount(idx); toast(`${acctName}: פג תוקף`, 'error'); return }
