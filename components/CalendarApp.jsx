@@ -460,13 +460,45 @@ export default function CalendarApp() {
     setModal('add')
   }
 
-  const evsByDate = useCallback((d) =>
-    events.filter(e => isoDate(e.start) === toKey(d)).sort((a,b) => a.start.localeCompare(b.start))
-  , [events])
+  const evsByDate = useCallback((d) => {
+    const key = toKey(d)
+    return events
+      .filter(e => {
+        const start = isoDate(e.start)
+        const end   = isoDate(e.end)
+        if (!start) return false
+        // Single day or timed event
+        if (!end || end === start) return start === key
+        // Multi-day event — check if d falls within [start, end)
+        // Google Calendar end date is exclusive for all-day events
+        const dTime     = d.getTime()
+        const startTime = new Date(start + 'T00:00:00').getTime()
+        const endTime   = new Date(end   + 'T00:00:00').getTime()
+        return dTime >= startTime && dTime < endTime
+      })
+      .sort((a, b) => a.start.localeCompare(b.start))
+  }, [events])
 
   const dotsMap = (() => {
     const m = {}
-    events.forEach(e => { const k = isoDate(e.start); if (k) (m[k] ??= []).push(e.color) })
+    events.forEach(e => {
+      const start = isoDate(e.start)
+      const end   = isoDate(e.end)
+      if (!start) return
+      // Single day
+      if (!end || end === start) {
+        ;(m[start] ??= []).push(e.color)
+        return
+      }
+      // Multi-day — add dot to every day in range
+      const cur = new Date(start + 'T00:00:00')
+      const endD = new Date(end + 'T00:00:00')
+      while (cur < endD) {
+        const k = toKey(cur)
+        ;(m[k] ??= []).push(e.color)
+        cur.setDate(cur.getDate() + 1)
+      }
+    })
     return m
   })()
 
