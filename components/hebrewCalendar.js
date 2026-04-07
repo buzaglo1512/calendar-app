@@ -74,6 +74,7 @@ const HOLIDAYS = {
   // Tishri
   'Tishri-1':   { name: 'ראש השנה א׳', emoji: '🍎' },
   'Tishri-2':   { name: 'ראש השנה ב׳', emoji: '🍎' },
+  'Tishri-3':   { name: 'צום גדליה',   emoji: '✡️'  },
   'Tishri-10':  { name: 'יום כיפור',   emoji: '✡️'  },
   'Tishri-15':  { name: 'סוכות',        emoji: '🌿' },
   'Tishri-16':  { name: 'חול המועד',   emoji: '🌿' },
@@ -117,6 +118,7 @@ const HOLIDAYS = {
   'Nisan-20':   { name: 'חול המועד',   emoji: '🫓' },
   'Nisan-21':   { name: 'שביעי של פסח', emoji: '🫓' },
   'Nisan-22':   { name: 'אחרון של פסח', emoji: '🫓' },
+  'Nisan-27':   { name: 'יום השואה',   emoji: '🕯️' },
   // Iyar
   'Iyar-4':     { name: 'יום הזיכרון', emoji: '🕯️' },
   'Iyar-5':     { name: 'יום העצמאות', emoji: '🇮🇱' },
